@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+body{@apply bg-slate-950 text-slate-100 min-h-screen}
+.card{@apply bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl}
+.input{@apply bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 outline-none focus:border-cyan-500}
+.btn{@apply rounded-xl px-4 py-2 font-semibold bg-cyan-500 text-slate-950 hover:bg-cyan-400 disabled:opacity-50}
+.btn2{@apply rounded-xl px-4 py-2 font-semibold bg-slate-800 hover:bg-slate-700}
+.badge{@apply inline-flex rounded-full px-2.5 py-1 text-xs font-bold}
