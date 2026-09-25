@@ -1,60 +1,63 @@
 # Central Telefónica VoIP / PBX
 
-Plataforma PBX basada en Asterisk 20, Node.js, PostgreSQL, Redis y React.
+PBX empresarial sobre Asterisk 20, Node.js/TypeScript, PostgreSQL, Redis y React, con integración nativa preparada para **VONO / Fale Vono**.
 
-> **Nota sobre VONO:** al 25/09/2026, `https://vono.com` redirige a un sitio de suministros médicos y no publica documentación SIP. La configuración incluida trata `sip.vono.com` como ejemplo/placeholder. Antes de producción hay que confirmar con el proveedor real: FQDN/IP, puerto, transporte, registro vs. autenticación por IP, realm/auth username, formato de DID/CLI, codecs y soporte de TLS/SRTP.
+## Integración VONO confirmada
+
+La documentación actual de VONO indica que las credenciales del SIP Trunk se obtienen desde **Meu Vono → Sip Trunk → Ver**, donde aparecen **login, contraseña y dominio/servidor**.
+
+Sus guías actuales muestran:
+- Puerto SIP: **5060**
+- Autenticación de entrada/salida
+- Registro tipo: `usuario:senha@dominio:5060/usuario`
+- Codecs publicados en ejemplos: `alaw`, `g722`, `ulaw` y `g729`
+- `qualify=yes`, `fromuser=USUARIO`, `context=from-trunk`
+
+Este proyecto usa PJSIP/Asterisk 20 y traduce esos parámetros a una configuración moderna.
+
+> **TLS/SRTP del carrier:** las páginas públicas revisadas no documentan TLS/SRTP para el trunk. Por compatibilidad el perfil VONO predeterminado usa SIP/UDP 5060 + RTP. TLS/WSS + SRTP sí son obligatorios para WebRTC/extensiones remotas. Si VONO confirma TLS/SRTP, basta cambiar transporte y media encryption.
 
 ## Arquitectura
 
-- **Asterisk 20**: PJSIP, ARI, WebRTC, IVR, colas, voicemail, conferencias, grabación opcional.
+- **Asterisk 20**: PJSIP, ARI, AMI, IVR, colas, voicemail, conferencias y grabación opcional.
 - **API Node.js + TypeScript**: JWT, REST, WebSocket, ARI + AMI.
-- **PostgreSQL**: usuarios, extensiones y CDR.
-- **Redis**: bus de eventos y caché de estado.
+- **PostgreSQL**: usuarios, extensiones, rutas DID y CDR.
+- **Redis**: caché/eventos.
 - **React + TypeScript + Tailwind + SIP.js**: dashboard y softphone WebRTC.
-- **Nginx**: HTTPS, proxy API/WebSocket y proxy WSS hacia Asterisk.
+- **Nginx**: HTTPS, API/WebSocket y WSS hacia Asterisk.
 
 ## Inicio rápido
 
 1. Copiar `.env.example` a `.env`.
-2. Colocar certificados TLS en `secrets/tls/fullchain.pem` y `secrets/tls/privkey.pem`.
-3. Confirmar y completar los parámetros VONO en `.env`.
+2. En Meu Vono copiar **login, senha y domínio/servidor** a las variables `VONO_*`.
+3. Colocar certificados TLS en `secrets/tls/fullchain.pem` y `secrets/tls/privkey.pem`.
 4. Ejecutar:
    ```bash
    docker compose up -d --build
    ```
-5. Crear el primer administrador:
+5. Crear administrador:
    ```bash
    docker compose exec api npm run seed:admin
    ```
 6. Abrir `https://PBX_DOMAIN`.
 
-## Puertos
+## Endpoints API
 
-- 443/tcp: frontend, API y WebSocket.
-- 5061/tcp: SIP TLS.
-- 10000-20000/udp: RTP/SRTP.
-- 8088/tcp: ARI HTTP interno (no exponer a Internet).
-- 5038/tcp: AMI interno (no exponer a Internet).
+- `POST /api/auth/login`
+- `POST /api/calls/originate`
+- `GET /api/calls/active`
+- `GET /api/calls/history`
+- `POST /api/calls/hangup`
+- `POST /api/calls/transfer`
+- `GET /api/extensions`
+- `POST /api/extensions`
+- `GET /api/trunks/vono/status`
+- `GET /api/dids`
+- `POST /api/dids`
 
-## Datos a confirmar con VONO
+WebSocket: `/socket.io`.
 
-- Host/FQDN o IPs de SBC.
-- Puerto SIP.
-- UDP/TCP/TLS aceptados; se recomienda TLS.
-- Registro SIP requerido o autenticación por IP.
-- `username`, `auth_username`, password/secret y realm.
-- `from_user`, `from_domain` y formato de P-Asserted-Identity/Remote-Party-ID.
-- Formato de DID entrante y número de destino entregado en Request-URI/To.
-- Codecs permitidos y orden preferido.
-- DTMF: RFC4733 (`rfc4733`) recomendado.
-- Soporte de SRTP y método (SDES/DTLS-SRTP).
-- IPs de señalización/RTP para ACL/firewall.
-- Reglas de Caller ID saliente y números autorizados.
-- Límites de CPS/canales concurrentes.
-
-## Pruebas de Asterisk
-
-Dentro del contenedor:
+## Pruebas Asterisk
 
 ```bash
 docker compose exec asterisk asterisk -rvvv
@@ -68,32 +71,54 @@ core show channels
 queue show
 ```
 
-> En PJSIP no se usa `sip show peers` (chan_sip). Su equivalente es `pjsip show endpoints`.
+> Con PJSIP use `pjsip show endpoints`; `sip show peers` corresponde al antiguo chan_sip.
 
-## Llamadas
+## Llamadas salientes
 
-### Saliente
-El dialplan usa `_X.` en el contexto `to-vono` y envía a `PJSIP/${EXTEN}@vono`. Ajuste normalización E.164 según el país/proveedor.
+Marque **9 + número** desde una extensión. El PBX quita el 9 y envía por `PJSIP/...@vono`.
 
-### Entrante
-El contexto `from-vono` busca el DID en la tabla `did_routes`; el API puede administrar rutas. Si no existe una ruta, envía al IVR principal.
+Para Brasil conviene normalizar después a un único formato (por ejemplo 55 + DDD + número) según lo que VONO acepte en su cuenta.
+
+## Llamadas entrantes / DID
+
+El contexto `from-vono` recibe la llamada del carrier y la entrega al IVR por defecto. Las rutas DID se administran en la API/BD y pueden apuntar a extensión, IVR o cola.
 
 ## Seguridad
 
-- SIP externo por TLS.
-- WebRTC mediante WSS + DTLS-SRTP.
-- API con JWT y rate limiting.
-- AMI/ARI solo en red Docker.
-- Fail2ban incluido.
-- Credenciales por variables/secrets, nunca hardcodeadas.
-- ACL de VONO configurable en PJSIP y firewall.
+- Web/API: HTTPS obligatorio.
+- Extensiones WebRTC: WSS + DTLS-SRTP.
+- AMI/ARI solo dentro de la red Docker.
+- JWT + rate limiting.
+- Passwords hasheadas con bcrypt.
+- Fail2ban.
+- Secrets fuera del repositorio.
+- Para el carrier, restringir firewall/ACL a las IPs que VONO confirme.
 
-## Errores SIP frecuentes
+## Datos que todavía conviene confirmar con VONO
 
-- **401 Unauthorized**: challenge normal o credenciales/realm incorrectos si persiste.
-- **403 Forbidden**: cuenta/CLI/IP no autorizada.
-- **404 Not Found**: destino o formato de numeración inválido.
-- **486 Busy Here**: destino ocupado.
-- **503 Service Unavailable**: proveedor/SBC sin capacidad o temporalmente fuera de servicio.
+- Si el dominio entregado resuelve a varias IP/SBC.
+- Si soportan **SIP TLS** y en qué puerto.
+- Si soportan **SRTP** y método.
+- DTMF exacto (el proyecto usa RFC4733).
+- Formato requerido de Caller ID / P-Asserted-Identity.
+- Formato exacto del DID entrante.
+- Límites de canales/CPS.
+- IPs oficiales de señalización y RTP para ACL.
 
-Revise `docker compose logs -f asterisk api nginx` y active `pjsip set logger on` durante diagnóstico.
+## Troubleshooting SIP
+
+- **401**: challenge normal; si se repite, revisar login/secret/realm.
+- **403**: credencial, IP o Caller ID no autorizado.
+- **404**: numeración/destino incorrecto.
+- **486**: destino ocupado.
+- **503**: indisponibilidad/capacidad del carrier.
+
+```bash
+docker compose logs -f asterisk api nginx
+```
+
+Durante diagnóstico:
+```
+pjsip set logger on
+rtp set debug on
+```
