@@ -1,0 +1,103 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [pbx]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [pbx]
+
+  asterisk:
+    build: ./asterisk
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "5061:5061/tcp"
+      - "${RTP_START:-10000}-${RTP_END:-20000}:${RTP_START:-10000}-${RTP_END:-20000}/udp"
+    volumes:
+      - ./asterisk/config:/etc/asterisk/templates:ro
+      - ./asterisk/entrypoint.sh:/entrypoint.sh:ro
+      - ./secrets/tls:/etc/asterisk/tls:ro
+      - asterisk_spool:/var/spool/asterisk
+      - asterisk_logs:/var/log/asterisk
+    healthcheck:
+      test: ["CMD-SHELL", "asterisk -rx 'core show uptime' >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [pbx]
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      asterisk: { condition: service_healthy }
+    volumes:
+      - ./asterisk/generated:/shared/asterisk-generated
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [pbx]
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    expose: ["80"]
+    networks: [pbx]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_healthy }
+      frontend: { condition: service_started }
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./secrets/tls:/etc/nginx/tls:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost/healthz >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [pbx]
+
+networks:
+  pbx:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  asterisk_spool:
+  asterisk_logs:
