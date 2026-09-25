@@ -1,0 +1,36 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Backend install
+        working-directory: backend
+        run: npm install
+      - name: Backend build
+        working-directory: backend
+        run: npm run build
+      - name: Frontend install
+        working-directory: frontend
+        run: npm install
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+      - name: Compose syntax
+        run: |
+          cp .env.example .env
+          mkdir -p secrets/tls
+          touch secrets/tls/fullchain.pem secrets/tls/privkey.pem
+          docker compose config >/dev/null
