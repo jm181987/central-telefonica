@@ -17,6 +17,28 @@ Este proyecto usa PJSIP/Asterisk 20 y traduce esos parámetros a una configuraci
 
 > **TLS/SRTP del carrier:** las páginas públicas revisadas no documentan TLS/SRTP para el trunk. Por compatibilidad el perfil VONO predeterminado usa SIP/UDP 5060 + RTP. TLS/WSS + SRTP sí son obligatorios para WebRTC/extensiones remotas. Si VONO confirma TLS/SRTP, basta cambiar transporte y media encryption.
 
+
+## Base de datos de producción
+
+Este proyecto está configurado para usar **PostgreSQL externo** mediante `DATABASE_URL`; no levanta un PostgreSQL local.
+
+Parámetros de la instancia asignada:
+
+- Host: `169.58.110.123`
+- Puerto: `5432`
+- Base: `knj_voip_voip`
+- Usuario: `knj_voip_voip_usr`
+- Contraseña: **solo en variables de entorno / secrets, nunca en Git**
+- Variable requerida: `DATABASE_URL`
+
+Formato:
+
+```env
+DATABASE_URL=postgresql://knj_voip_voip_usr:<PASSWORD>@169.58.110.123:5432/knj_voip_voip
+```
+
+Al ejecutar `docker compose up -d --build`, el servicio `db-migrate` aplica automáticamente `db/init.sql` sobre esa base y la API arranca solamente si la migración termina correctamente.
+
 ## Arquitectura
 
 - **Asterisk 20**: PJSIP, ARI, AMI, IVR, colas, voicemail, conferencias y grabación opcional.
