@@ -7,6 +7,11 @@ import './index.css';
 type Cdr={id:number,src:string,dst:string,disposition:string,started_at:string,duration:number};
 type Channel={id:string,name:string,state:string,caller?:any,connected?:any};
 
+const API_BASE=(import.meta.env.VITE_API_BASE_URL||'').replace(/\/$/,'');
+const SOCKET_URL=(import.meta.env.VITE_SOCKET_URL||API_BASE||location.origin).replace(/\/$/,'');
+const SIP_WS_URL=import.meta.env.VITE_SIP_WS_URL||('wss://'+location.host+'/ws');
+const SIP_DOMAIN=import.meta.env.VITE_SIP_DOMAIN||location.host;
+
 function App(){
   const [token,setToken]=useState(localStorage.getItem('token')||'');
   const [email,setEmail]=useState('');
@@ -25,7 +30,7 @@ function App(){
   const api=async(path:string,init:RequestInit={})=>{
     const headers:any={'Content-Type':'application/json',...(init.headers||{})};
     if(token)headers.Authorization='Bearer '+token;
-    const r=await fetch(path,{...init,headers});
+    const r=await fetch(API_BASE+path,{...init,headers});
     const data=await r.json().catch(()=>({}));
     if(!r.ok)throw new Error(data.message||data.error||'Error');
     return data;
@@ -33,19 +38,19 @@ function App(){
 
   const refresh=async()=>{if(!token)return; try{const [t,a,h]=await Promise.all([api('/api/trunks/vono/status'),api('/api/calls/active'),api('/api/calls/history?limit=100')]);setTrunk(t);setActive(a);setCdr(h);}catch(e){console.error(e)}};
 
-  useEffect(()=>{refresh(); if(!token)return; const s=io({auth:{token}});s.on('telephony:event',refresh);s.on('ari:event',refresh);return()=>s.close()},[token]);
+  useEffect(()=>{refresh(); if(!token)return; const s=io(SOCKET_URL,{auth:{token}});s.on('telephony:event',refresh);s.on('ari:event',refresh);return()=>s.close()},[token]);
 
   const login=async(e:React.FormEvent)=>{e.preventDefault();const d=await api('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});localStorage.setItem('token',d.token);setToken(d.token)};
 
   const connectPhone=async()=>{
-    const domain=location.host;
+    const domain=SIP_DOMAIN;
     const uri=UserAgent.makeURI('sip:'+ext+'@'+domain);
     if(!uri)return;
     const ua=new UserAgent({
       uri,
       authorizationUsername:ext,
       authorizationPassword:sipPass,
-      transportOptions:{server:'wss://'+location.host+'/ws'},
+      transportOptions:{server:SIP_WS_URL},
       sessionDescriptionHandlerFactoryOptions:{constraints:{audio:true,video:false}},
       delegate:{onInvite:(invitation:any)=>{
         sessionRef.current=invitation;
@@ -66,7 +71,7 @@ function App(){
 
   const call=async()=>{
     if(!uaRef.current)return alert('Conecte el softphone');
-    const uri=UserAgent.makeURI('sip:'+number+'@'+location.host); if(!uri)return;
+    const uri=UserAgent.makeURI('sip:'+number+'@'+SIP_DOMAIN); if(!uri)return;
     const inviter=new Inviter(uaRef.current,uri,{sessionDescriptionHandlerOptions:{constraints:{audio:true,video:false}}});
     sessionRef.current=inviter;
     inviter.stateChange.addListener((state:any)=>{setPhone(String(state));if(state===SessionState.Established)attachAudio(inviter)});
