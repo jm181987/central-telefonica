@@ -1,0 +1,6 @@
+{
+  "name":"central-telefonica-web","private":true,"version":"1.0.0","type":"module",
+  "scripts":{"build":"tsc -b && vite build","dev":"vite"},
+  "dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","typescript":"latest","react":"latest","react-dom":"latest","sip.js":"^0.21.2","socket.io-client":"^4.8.1"},
+  "devDependencies":{"@types/react":"latest","@types/react-dom":"latest","tailwindcss":"^3.4.17","postcss":"^8.4.49","autoprefixer":"^10.4.20"}
+}
