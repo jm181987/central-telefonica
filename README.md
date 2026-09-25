@@ -57,10 +57,7 @@ Al ejecutar `docker compose up -d --build`, el servicio `db-migrate` aplica auto
    ```bash
    docker compose up -d --build
    ```
-5. Crear administrador:
-   ```bash
-   docker compose exec api npm run seed:admin
-   ```
+5. Definir `ADMIN_EMAIL` y `ADMIN_PASSWORD` en las variables de entorno del backend. Al arrancar, la API crea o actualiza automáticamente esa cuenta con rol `admin`.
 6. Abrir `https://PBX_DOMAIN`.
 
 ## Endpoints API
