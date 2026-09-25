@@ -1,0 +1,9 @@
+.env
+node_modules/
+dist/
+.DS_Store
+*.log
+secrets/tls/*.pem
+!secrets/tls/.gitkeep
+asterisk/generated/*.conf
+!asterisk/generated/.gitkeep
