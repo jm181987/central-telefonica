@@ -38,7 +38,7 @@ function App(){
 
   const refresh=async()=>{if(!token)return; try{const [t,a,h]=await Promise.all([api('/api/trunks/vono/status'),api('/api/calls/active'),api('/api/calls/history?limit=100')]);setTrunk(t);setActive(a);setCdr(h);}catch(e){console.error(e)}};
 
-  useEffect(()=>{refresh(); if(!token)return; const s=io(SOCKET_URL,{auth:{token}});s.on('telephony:event',refresh);s.on('ari:event',refresh);return()=>s.close()},[token]);
+  useEffect(()=>{refresh(); if(!token)return; const s=io(SOCKET_URL,{auth:{token}});s.on('telephony:event',refresh);s.on('ari:event',refresh);return()=>{s.close();};},[token]);
 
   const login=async(e:React.FormEvent)=>{e.preventDefault();const d=await api('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});localStorage.setItem('token',d.token);setToken(d.token)};
 
