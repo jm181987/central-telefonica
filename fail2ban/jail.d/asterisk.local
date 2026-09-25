@@ -1,0 +1,9 @@
+[asterisk]
+enabled = true
+filter = asterisk
+logpath = /var/log/asterisk/messages
+maxretry = 5
+findtime = 600
+bantime = 3600
+backend = auto
+action = iptables-allports[name=ASTERISK]
