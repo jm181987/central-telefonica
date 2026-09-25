@@ -6,6 +6,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import {Server} from 'socket.io';
 import Ari from 'ari-client';
 import AsteriskManager from 'asterisk-manager';
@@ -75,8 +76,8 @@ app.post('/api/calls/originate',async(req,res)=>{
   const b=z.object({number:z.string().regex(/^\+?[0-9]{3,20}$/),callerId:z.string().optional()}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'invalid_number'});
   try{
-    const r=await amiAction({action:'Originate',channel:'Local/'+b.data.number+'@ari-originate',context:'ari-originate',exten:b.data.number,priority:1,callerid:b.data.callerId||config.vono.username,async:'true',timeout:60000});
-    res.status(202).json({ok:true,result:r});
+    const channel=await ari.channels.originate({endpoint:'PJSIP/'+b.data.number+'@vono',app:config.ari.app,callerId:b.data.callerId||config.vono.username,timeout:60});
+    res.status(202).json({ok:true,channel:{id:channel.id,name:channel.name,state:channel.state}});
   }catch(e:any){res.status(502).json({error:'originate_failed',message:e.message});}
 });
 
@@ -150,6 +151,16 @@ app.post('/api/dids',async(req,res)=>{
   const b=z.object({did:z.string().min(3),destination_type:z.enum(['extension','ivr','queue','conference']),destination:z.string().min(1)}).safeParse(req.body);
   if(!b.success)return res.status(400).json({error:'invalid_payload'});
   const q=await db.query('INSERT INTO did_routes(did,destination_type,destination) VALUES($1,$2,$3) ON CONFLICT(did) DO UPDATE SET destination_type=EXCLUDED.destination_type,destination=EXCLUDED.destination RETURNING *',[b.data.did,b.data.destination_type,b.data.destination]);
+  const all=await db.query('SELECT did,destination_type,destination FROM did_routes ORDER BY did');
+  const lines=all.rows.map((r:any)=>{
+    const target=r.destination_type==='extension'?'Goto(from-internal,'+r.destination+',1)':
+      r.destination_type==='queue'?'Queue('+r.destination+',tT,,,60)':
+      r.destination_type==='conference'?'ConfBridge('+r.destination+',default_bridge,default_user)':
+      'Goto(main-ivr,s,1)';
+    return 'exten => '+r.did+',1,NoOp(DID '+r.did+')\n same => n,Gosub(recording,s,1(inbound,'+r.did+'))\n same => n,'+target+'\n';
+  }).join('\n');
+  await fs.writeFile('/shared/asterisk-generated/extensions_dids.conf',lines,{mode:0o600});
+  await amiAction({action:'Command',command:'dialplan reload'});
   res.json(q.rows[0]);
 });
 
@@ -157,6 +168,7 @@ io.use((socket,next)=>{
   try{
     const token=String(socket.handshake.auth?.token||'');
     if(!token)return next(new Error('unauthorized'));
+    jwt.verify(token,config.jwtSecret);
     next();
   }catch{next(new Error('unauthorized'));}
 });
