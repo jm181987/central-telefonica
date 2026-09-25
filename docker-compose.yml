@@ -34,10 +34,12 @@ services:
     restart: unless-stopped
     env_file: .env
     ports:
+      - "5060:5060/udp"
       - "5061:5061/tcp"
       - "${RTP_START:-10000}-${RTP_END:-20000}:${RTP_START:-10000}-${RTP_END:-20000}/udp"
     volumes:
       - ./asterisk/config:/etc/asterisk/templates:ro
+      - ./asterisk/generated:/etc/asterisk/generated
       - ./asterisk/entrypoint.sh:/entrypoint.sh:ro
       - ./secrets/tls:/etc/asterisk/tls:ro
       - asterisk_spool:/var/spool/asterisk
