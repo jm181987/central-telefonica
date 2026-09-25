@@ -44,6 +44,15 @@ ami.on('managerevent',async(event:any)=>{
   }
 });
 
+async function ensureBootstrapAdmin(){
+  const hash=await bcrypt.hash(config.admin.password,12);
+  await db.query(
+    "INSERT INTO users(email,password_hash,role) VALUES($1,$2,'admin') ON CONFLICT(email) DO UPDATE SET password_hash=EXCLUDED.password_hash, role='admin'",
+    [config.admin.email,hash]
+  );
+  console.log('Bootstrap admin ready');
+}
+
 async function connectAri(){
   ari=await (Ari as any).connect(config.ari.url,config.ari.username,config.ari.password);
   ari.on('StasisStart',(_e:any,c:any)=>io.emit('ari:event',{type:'StasisStart',channel:c}));
@@ -173,6 +182,7 @@ io.use((socket,next)=>{
   }catch{next(new Error('unauthorized'));}
 });
 
+await ensureBootstrapAdmin();
 server.listen(config.port,async()=>{
   console.log('API listening on '+config.port);
   try{await connectAri();console.log('ARI connected');}catch(e){console.error('ARI connection failed',e);}
