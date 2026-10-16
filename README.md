@@ -20,24 +20,9 @@ Este proyecto usa PJSIP/Asterisk 20 y traduce esos parámetros a una configuraci
 
 ## Base de datos de producción
 
-Este proyecto está configurado para usar **PostgreSQL externo** mediante `DATABASE_URL`; no levanta un PostgreSQL local.
+La aplicación utiliza PostgreSQL externo mediante `DATABASE_URL`. Configura el host, usuario, contraseña y base de datos exclusivamente en secretos del entorno de despliegue. No publiques direcciones internas, nombres de usuarios ni credenciales de infraestructura.
 
-Parámetros de la instancia asignada:
-
-- Host: `169.58.110.123`
-- Puerto: `5432`
-- Base: `knj_voip_voip`
-- Usuario: `knj_voip_voip_usr`
-- Contraseña: **solo en variables de entorno / secrets, nunca en Git**
-- Variable requerida: `DATABASE_URL`
-
-Formato:
-
-```env
-DATABASE_URL=postgresql://knj_voip_voip_usr:<PASSWORD>@169.58.110.123:5432/knj_voip_voip
-```
-
-Al ejecutar `docker compose up -d --build`, el servicio `db-migrate` aplica automáticamente `db/init.sql` sobre esa base y la API arranca solamente si la migración termina correctamente.
+El servicio `db-migrate` ejecuta las migraciones antes del inicio de la API. Realiza un respaldo antes de aplicar cambios al esquema.
 
 ## Arquitectura
 
@@ -141,3 +126,7 @@ Durante diagnóstico:
 pjsip set logger on
 rtp set debug on
 ```
+
+
+---
+Desarrollado por **KNJ** · [KNJ Marketing](https://www.marketingknj.site/).
